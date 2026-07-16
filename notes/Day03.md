@@ -8,10 +8,11 @@ C代码:1.trap.c 2.syscall()按照系统调用号调用相应的系统调用。
 
 比如:write() -> asm(ecall) -> 进入内核 -> syscall() -> 按照系统调用号调用sys_write()
 
-一个经典例子:exec()
+### 一个经典例子:exec()
 
 //exec.c: replace a process with an executable file
 
+```c
 int main()
 {
     char *argv[] = { "echo", "this", "is", "echo", 0 };
@@ -22,7 +23,9 @@ int main()
 
     exit(0);
 }
-## 解释
+```
+
+### 解释
 1.argv是一个指针数组,所以其实是有5个指针指向了这一些字符串。
 2.exec("echo", argv) 表示将当前进程替换成echo文件中的代码。
 3.替换之后进入到int main(int argc, int * argv) 第一个放程序名，第二个放参数。
@@ -30,7 +33,8 @@ int main()
 另一个fork and wait的例子:
 #include "user/user.h"
 
-// forkexec.c: fork then exec
+### forkexec.c: fork then exec
+```c
 int main() 
 {
     int pid, status;
@@ -47,7 +51,9 @@ int main()
         exit(0);
     } 
 }
-## 解释
+```
+
+### 解释
 0.什么是PCB process control block ,是一个维护在内核的数据结构，kernel为每个进程都维护了一个
 1.fork是两个独立的进程
 2.exit()与wait()之间的通信：
