@@ -1,12 +1,14 @@
-## xv6 syscall()
+## 1.syscall()
 
-xv6的系统调用是由一段汇编代码，一段C代码构成的。
+### 系统调用是由一段汇编代码，一段C代码构成的。
 
 汇编部分重点:1.保存系统调用号2.ecall(告诉CPU我要进入操作系统)使操作系统陷入内核
 
 C代码:1.trap.c 2.syscall()按照系统调用号调用相应的系统调用。
 
 比如:write() -> asm(ecall) -> 进入内核 -> syscall() -> 按照系统调用号调用sys_write()
+
+## 2.三个进程API：fork() exec() wait()
 
 ### 一个经典例子:exec()
 
@@ -33,13 +35,16 @@ int main()
 另一个fork and wait的例子:
 #include "user/user.h"
 
-### forkexec.c: fork then exec
+### forkexec.c: fork exec and wait
 ```c
 int main() 
 {
     int pid, status;
-    pid = fork();
-    if(pid == 0){
+    pid = fork(); //创建一个子进程，返回pid
+    if(pid < 0) {
+        fprintf(stderr, "fork failed\n");
+        exit(1);
+    if(pid == 0){ //注意:fork系统调用返回后,父子进程都是从这行开始,
         char * argv[] = { "echo", "THIS", "IS", "ECHO",0 };
         exec("echo", argv) ;
         printf("exec failed!\n");
