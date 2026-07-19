@@ -59,8 +59,8 @@ int main()
 ```
 
 ### 解释
-0.什么是PCB process control block ,是一个维护在内核的数据结构，kernel为每个进程都维护了一个
-1.fork是两个独立的进程
-2.exit()与wait()之间的通信：
-1.不是直接通信，而是通过 PCB（进程控制块）传递信息。
-2.子进程运行完了之后调用exit(退出码)进入内核，proc->state = zombie,内核记录退出码，此时PCB还在。父进程wait(&status)ecall进入内核后sys_wait开始检查所有孩子发现其中一个state = zombie，内核将退出码复制到父进程user态的status，最后释放PCB。
+- 0.什么是PCB process control block ,是一个维护在内核的数据结构，kernel为每个进程都维护了一个
+- 1.fork是两个独立的进程
+- 2.exit()与wait()之间的通信：
+- 21.不是直接通信，而是通过 PCB（进程控制块）传递信息。
+- 22.子进程运行完了之后调用exit(退出码)进入内核，proc->state = zombie,内核记录退出码，此时PCB还在。父进程wait(&status)ecall进入内核后sys_wait开始检查所有孩子发现其中一个state = zombie，内核将退出码复制到父进程user态的status，最后释放PCB。
