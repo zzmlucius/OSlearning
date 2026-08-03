@@ -85,7 +85,7 @@ gets(char *buf, int max)
 }
 
 int
-stat(const char *n, struct stat *st) //传入路径和stat
+stat(const char *n, struct stat *st)
 {
   int fd;
   int r;

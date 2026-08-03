@@ -113,12 +113,10 @@ sys_fstat(void)
   struct file *f;
   uint64 st; // user pointer to struct stat
 
-  argaddr(1, &st);         //读取第1个系统调用参数保存到st，这里st是uint64是因为读取的是用户空间地址
-  if (argfd(0, 0, &f) < 0) //读取第0个系统调用参数找到fd对应的文件存到f
+  argaddr(1, &st);
+  if (argfd(0, 0, &f) < 0)
     return -1;
-  return filestat(f, st);  //读取f的inode信息，copyout()写入用户地址st
-  
-  //写入成功return 0,写入失败return -1
+  return filestat(f, st);
 }
 
 // Create the path new as a link to the same inode as old.

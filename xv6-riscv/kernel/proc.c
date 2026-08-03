@@ -8,7 +8,7 @@
 
 struct cpu cpus[NCPU];
 
-struct proc proc[NPROC];
+struct proc proc[NPROC]; // the proc table, xv6创建进程时总是从这个固定数组寻找槽位
 
 struct proc *initproc;
 
@@ -102,12 +102,12 @@ allocpid()
   return pid;
 }
 
-// Look in the process table for an UNUSED proc.
+// Look in the process table for an UNUSED proc.(找一个空槽位并初始化为新进程)
 // If found, initialize state required to run in the kernel,
 // and return with p->lock held.
 // If there are no free procs, or a memory allocation fails, return 0.
 static struct proc *
-allocproc(void)
+allocproc(void) 
 {
   struct proc *p;
 
@@ -124,6 +124,7 @@ allocproc(void)
 found:
   p->pid = allocpid();
   p->state = USED;
+  p->mask = 0;
 
   // Allocate a trapframe page.
   if ((p->trapframe = (struct trapframe *)kalloc()) == 0) {
@@ -291,6 +292,9 @@ kfork(void)
   safestrcpy(np->name, p->name, sizeof(p->name));
 
   pid = np->pid;
+
+  // trace the child
+  np->mask = p->mask;
 
   release(&np->lock);
 
@@ -512,15 +516,14 @@ forkret(void)
   // Still holding p->lock from scheduler.
   release(&p->lock);
 
-  if (first) {
+  if (__atomic_load_n(&first, __ATOMIC_ACQUIRE)) {
     // File system initialization must be run in the context of a
     // regular process (e.g., because it calls sleep), and thus cannot
     // be run from main().
     fsinit(ROOTDEV);
 
-    first = 0;
     // ensure other cores see first=0.
-    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+    __atomic_store_n(&first, 0, __ATOMIC_RELEASE);
 
     // We can invoke kexec() now that file system is initialized.
     // Put the return value (argc) of kexec into a0.
@@ -689,4 +692,21 @@ procdump(void)
     printk("%d %s %s", p->pid, state, p->name);
     printk("\n");
   }
+}
+
+// calculate the num of not UNUSED procs
+uint64
+nproc(void)
+{
+  uint64 count = 0;
+  struct proc *p;
+
+  for(p = proc; p < &proc[NPROC]; p++){
+    acquire(&p->lock);
+    if(p->state != UNUSED)
+      count++;
+    release(&p->lock);
+  }
+
+  return count;
 }

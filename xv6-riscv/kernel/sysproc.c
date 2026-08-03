@@ -6,6 +6,8 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "vm.h"
+#include "sysinfo.h"
+
 
 uint64
 sys_exit(void)
@@ -106,4 +108,34 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+uint64
+sys_trace(void) // sys_trace implementation
+{
+  // 只有当前进程会访问 p->mask,所以不用lock
+  int mask;
+  
+  // RISC-V ABI 规定 一开始user.h/trace()第一个参数放在a0寄存器
+  argint(0, &mask); 
+  
+  struct proc *p = myproc();
+  p->mask = mask;
+  return 0;
+}
+
+uint64 
+sys_info(void) { // 遍历freelist和proc[NPROC]数组
+  struct sysinfo kif;
+  uint64 ifp;
+  
+  argaddr(0, &ifp); // 拿过来的用户态的地址
+  
+  kif.freemem  = freemem();
+  kif.nproc    = nproc();
+
+  if(copyout(myproc() -> pagetable, ifp, (char*)&kif, sizeof(kif)) < 0)
+    return -1;
+
+  return 0;
 }
