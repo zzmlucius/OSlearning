@@ -105,6 +105,8 @@ extern uint64 sys_close(void);
 extern uint64 sys_sync(void);
 extern uint64 sys_trace(void);
 extern uint64 sys_info(void);
+extern uint64 sys_shutdown(void);
+extern uint64 sys_pgaccess(void);
 
 // An array mapping syscall numbers from syscall.h
 // to the function that handles the system call.
@@ -134,6 +136,8 @@ static uint64 (*syscalls[])(void) = {
   [SYS_sync]    sys_sync,
   [SYS_trace]   sys_trace,
   [SYS_info]    sys_info,
+  [SYS_shutdown]sys_shutdown,
+  [SYS_pgaccess]sys_pgaccess,
   // clang-format on
 };
 
@@ -163,6 +167,8 @@ static char* syscallnames[] = {
   "sys_sync",
   "sys_trace",
   "sys_info",
+  "sys_shutdown",
+  "sys_pgaccess",
 };
 
 void

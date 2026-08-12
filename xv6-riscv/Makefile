@@ -152,6 +152,8 @@ UPROGS=\
 	$U/_trace\
 	$U/_info\
 	$U/_ugetpid\
+	$U/_shutdown\
+	$U/_pgtbltest\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)

@@ -28,6 +28,8 @@ int uptime(void);
 int sync(void);
 int trace(int); 
 int info(struct sysinfo *);
+int shutdown(void);
+int pgaccess(void *, int, void *);
 
 // ulib.c
 int stat(const char *, struct stat *);
