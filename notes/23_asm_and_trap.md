@@ -26,6 +26,3 @@ trap处理中jalr t0, 即pc = t0
     - SIE = SPIE
     - SPIE = 1 
     - SPP = 0
-
-## trap处理的大概流程
-
