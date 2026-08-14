@@ -154,6 +154,7 @@ UPROGS=\
 	$U/_ugetpid\
 	$U/_shutdown\
 	$U/_pgtbltest\
+	$U/_call\
 
 fs.img: mkfs/mkfs README $(UPROGS)
 	mkfs/mkfs fs.img README $(UPROGS)
