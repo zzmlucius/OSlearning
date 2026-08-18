@@ -1,5 +1,3 @@
-ecall 后, sepc存ecall指令地址，pc存stvec地址，satp不变，关闭中断
-stvec存trampoline中uservec的地址
 # Trap 的调用与返回
 
 ```text
