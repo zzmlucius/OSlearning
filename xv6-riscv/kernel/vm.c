@@ -310,6 +310,7 @@ freewalk(pagetable_t pagetable)
       panic("freewalk: leaf");
     }
   }
+  // 已来到L2且叶子页(data page)已被释放, 将释放L2映射页(map page)
   kfree((void *)pagetable);
 }
 
