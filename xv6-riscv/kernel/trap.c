@@ -68,10 +68,19 @@ usertrap(void)
     syscall();
   } else if ((which_dev = devintr()) != 0) {
     // ok
-  } else if ((r_scause() == 15 || r_scause() == 13) &&
-             vmfault(p->pagetable, r_stval(), (r_scause() == 13) ? 1 : 0) !=
-               0) {
-    // page fault on lazily-allocated page
+  } else if (r_scause() == 15 && r_stval() < p->sz && r_stval() >= 0) { // 写入错误: 只处理guard page 和 lazy alloc
+      if(*walk(p->k_pagetable, r_stval(), 0) & PTE_V) { // guard page: PTE_V = 1
+        printk("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
+        printk("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
+        printk("Warning : visit the guard page");
+        setkilled(p);
+      }
+
+      else { // 按照总是先从text段的开头开始执行可以实现为
+        if(growproc(p->sz - r_stval()))
+
+      }
+    }
   } else {
     printk("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
     printk("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
