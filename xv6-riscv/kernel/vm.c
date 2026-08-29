@@ -111,7 +111,7 @@ kvminithart()
 pte_t *
 walk(pagetable_t pagetable, uint64 va, int alloc) // 寻址、创建新页表页、查询
 {
-  if (va >= MAXVA)
+  if (va >= MAXVA && va < HIGH_HALF_BASE)
     panic("walk");
 
   for (int level = 2; level > 0; level--) {
@@ -137,7 +137,7 @@ walkaddr(pagetable_t pagetable, uint64 va) // 返回L0PTE物理页起始地址
   pte_t *pte;
   uint64 pa;
 
-  if (va >= MAXVA)
+  if (va > MAXVA)
     return 0;
 
   pte = walk(pagetable, va, 0);
@@ -239,7 +239,7 @@ kvmunmap(pagetable_t k_pagetable)
       uint64 child = PTE2PA(pte);
       kvmunmap((pagetable_t)child);
       k_pagetable[i] = 0;
-    } else if ((pte & PTE_V) && (pte & (PTE_W | PTE_R | PTE_X))) { // unmap the L0 but reserve the data
+    } else if ((pte & PTE_V) && (pte & (PTE_W | PTE_R | PTE_X)) && (pte & PTE_U) == 0) { // unmap the L0 but reserve the data
       k_pagetable[i] = 0;
       continue;
     }
@@ -312,7 +312,7 @@ freewalk(pagetable_t pagetable)
       panic("freewalk: leaf");
     }
   }
-  // 已来到L2且叶子页(data page)已被释放, 将释放L2映射页(map page)
+  // 已来到L0且叶子页(data page)已被释放, 将释放L0页
   kfree((void *)pagetable);
 }
 
@@ -346,8 +346,8 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
       continue; // page table entry hasn't been allocated
     if ((*pte & PTE_V) == 0)
       continue; // physical page hasn't been allocated
-    pa = PTE2PA(*pte);       // 取出pte对应的物理地址pa
-    flags = PTE_FLAGS(*pte); // 取出pte中的flags
+    pa = PTE2PA(*pte);
+    flags = PTE_FLAGS(*pte);
     if ((mem = kalloc()) == 0)
       goto err;
     memmove(mem, (char *)pa, PGSIZE); // 将pa中大小位PGSIZE的数据移入mem (memmove要求两个pa)
@@ -369,8 +369,9 @@ err:
 int
 u2kvmmap(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 lowaddr, uint64 highaddr)
 {
-  if ((highaddr >= PLIC)) { // 内核页表上用户内存不能超过PLIC
-    printk("u2kvmmap : user memmory out of range(PLIC)");
+
+  if (lowaddr >= MAXVA || highaddr >= MAXVA) {
+    printk("u2kvmmap : user memmory out of range");
     return -1;
   }
   
@@ -385,10 +386,14 @@ u2kvmmap(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 lowaddr, uint64 highaddr
       continue; // physical page hasn't been allocated
     pa = PTE2PA(*pte);
 
-    // set the PTE_U = 0 for k_pagetable to visit it through MMU
+    // skip the guard page
+    if (*pte & PTE_G == 0)
+      continue;
+
+    // set valid user page PTE_U = 0 for k_pagetable to visit it through MMU
     flags = PTE_FLAGS(*pte & (uint64)(~PTE_U));
 
-    if (mappages(kpgtbl, i, PGSIZE, pa, flags) != 0)
+    if (mappages(kpgtbl, U2K(i), PGSIZE, pa, flags) != 0)
       goto err;
   }
 
@@ -396,7 +401,7 @@ u2kvmmap(pagetable_t upgtbl, pagetable_t kpgtbl, uint64 lowaddr, uint64 highaddr
 
 err:
   // 映射失败不能释放物理页
-  uvmunmap(kpgtbl, PGROUNDUP(lowaddr), (i - PGROUNDUP(lowaddr)) / PGSIZE, 0); 
+  uvmunmap(kpgtbl, PGROUNDUP(U2K(lowaddr)), (i - PGROUNDUP(lowaddr)) / PGSIZE, 0); 
   return -1;
 }
 
@@ -410,7 +415,7 @@ uvmclear(pagetable_t pagetable, uint64 va)
   pte = walk(pagetable, va, 0);
   if (pte == 0)
     panic("uvmclear");
-  *pte &= ~PTE_U;
+  *pte = (*pte & ~PTE_U) | PTE_G;
 }
 
 // Copy from kernel to user.
@@ -419,23 +424,42 @@ uvmclear(pagetable_t pagetable, uint64 va)
 int
 copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 {
-  uint64 n, va0, pa0;
-  pte_t *pte;
+  struct proc *p = myproc();
+  uint64 va0, pa0, n;
 
-  while (len > 0) {
-    va0 = PGROUNDDOWN(dstva);         
-    if (va0 >= MAXVA)         
+  if (len > 0 && (dstva >= MAXVA || len > MAXVA - dstva))
+    return -1;
+
+  // The current process's user pages have high-half aliases in its kernel
+  // page table. Accessing an absent alias lets kerneltrap allocate a lazy
+  // page. A non-current page table (notably exec's new page table) has no
+  // such aliases, so it must still be walked in software.
+  if (p != 0 && pagetable == p->pagetable) {
+    if (dstva > p->sz || len > p->sz - dstva)
       return -1;
 
+    while (len > 0) {
+      va0 = PGROUNDDOWN(dstva);
+      if (va0 >= USYSCALL)
+        return -1;
+
+      n = PGSIZE - (dstva - va0);
+      if (n > len)
+        n = len;
+      memmove((void *)U2K(dstva), src, n);
+
+      len -= n;
+      src += n;
+      dstva = va0 + PGSIZE;
+    }
+    return 0;
+  }
+
+  while (len > 0) {
+    va0 = PGROUNDDOWN(dstva);
     pa0 = walkaddr(pagetable, va0);
     if (pa0 == 0)
       return -1;
-
-    pte = walk(pagetable, va0, 0);
-    // forbid copyout over read-only user text pages.
-    if ((*pte & PTE_W) == 0)
-      return -1;
-
     n = PGSIZE - (dstva - va0);
     if (n > len)
       n = len;
@@ -488,6 +512,8 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
     return -1;
   }
   uint64 va0, n;
+  srcva = U2K(srcva);
+
   while (len > 0) {
     va0 = PGROUNDDOWN(srcva);
     n = PGSIZE - (srcva - va0); // 从srcva开始到该页结束剩下的量
@@ -565,6 +591,8 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   if(max > p->sz - srcva)
     max = p->sz - srcva;
 
+  srcva += HIGH_HALF_BASE;
+  
   while (got_null == 0 && max > 0) {
     va0 = PGROUNDDOWN(srcva);
     n = PGSIZE - (srcva - va0);

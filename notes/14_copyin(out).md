@@ -18,11 +18,11 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) // (用户�
   pte_t *pte;
 
   while (len > 0) {
-    va0 = PGROUNDDOWN(dstva);         找到一页的起始地址
+    va0 = PGROUNDDOWN(dstva);         // 找到一页的起始地址
     if (va0 >= MAXVA)
       return -1;
 
-    pa0 = walkaddr(pagetable, va0);   核心:虚拟地址 -> 页表查询 -> 物理地址
+    pa0 = walkaddr(pagetable, va0);   // 核心:虚拟地址 -> 页表查询 -> 物理地址
     if (pa0 == 0) {
       if ((pa0 = vmfault(pagetable, va0, 0)) == 0) {
         return -1;
@@ -34,10 +34,10 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len) // (用户�
     if ((*pte & PTE_W) == 0)
       return -1;
 
-    n = PGSIZE - (dstva - va0);       这一页还能复制多少
+    n = PGSIZE - (dstva - va0);       // 这一页还能复制多少
     if (n > len)
       n = len;
-    memmove((void *)(pa0 + (dstva - va0)), src, n); memmove只能操作当前地址空间***可直接访问***的地址
+    memmove((void *)(pa0 + (dstva - va0)), src, n); // memmove只能操作当前地址空间***可直接访问***的地址
 
     len -= n;
     src += n;

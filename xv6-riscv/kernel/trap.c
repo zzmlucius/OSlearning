@@ -47,6 +47,7 @@ usertrap(void)
   w_stvec((uint64)kernelvec); //DOC: kernelvec
 
   struct proc *p = myproc();
+  pte_t *pte;
 
   // save user program counter.
   p->trapframe->epc = r_sepc();
@@ -66,24 +67,42 @@ usertrap(void)
     intr_on();
 
     syscall();
-  } else if ((which_dev = devintr()) != 0) {
+  } 
+  
+  else if ((which_dev = devintr()) != 0) {
     // ok
-  } else if (r_scause() == 15 && r_stval() < p->sz && r_stval() >= 0) { // 写入错误: 只处理guard page 和 lazy alloc
-      if(*walk(p->k_pagetable, r_stval(), 0) & PTE_V) { // guard page: PTE_V = 1
-        printk("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
-        printk("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
-        printk("Warning : visit the guard page");
+  } 
+
+  else if ((r_scause() == 15 || r_scause() == 13) && r_stval() < p->sz
+  && ((pte = walk(p->pagetable, r_stval(), 0)) == 0 || (*pte & PTE_V) == 0)) { // 可以排除guard page
+    // scause : 15 -> store page fault  13 : load page fault
+    // 1.分配物理页 2.初始化物理页 3.将pa映射到pagetable上的va
+    uint64 pa;
+    if((pa = (uint64)kalloc()) != 0) {
+      memset((void *)pa, 0, PGSIZE);
+      if (mappages(p->pagetable, PGROUNDDOWN(r_stval()), PGSIZE, 
+      pa, PTE_U | PTE_R | PTE_W) == -1 
+      || mappages(p->k_pagetable, PGROUNDDOWN(r_stval() + HIGH_HALF_BASE), PGSIZE,
+      pa, PTE_R | PTE_W) == -1) {
+        printe(p);
+        printk("No more free physical memmory.");
+        uvmunmap(p->k_pagetable, PGROUNDDOWN(r_stval() + HIGH_HALF_BASE), 1, 0);
+        uvmunmap(p->pagetable, PGROUNDDOWN(r_stval()), 1, 0);
+        kfree((void *)pa);
         setkilled(p);
       }
-
-      else { // 按照总是先从text段的开头开始执行可以实现为
-        if(growproc(p->sz - r_stval()))
-
-      }
+      sfence_vma();
     }
-  } else {
-    printk("usertrap(): unexpected scause 0x%lx pid=%d\n", r_scause(), p->pid);
-    printk("            sepc=0x%lx stval=0x%lx\n", r_sepc(), r_stval());
+    
+    else {
+      printe(p);
+      printk("No more free physical memmory.");
+      setkilled(p);
+    }
+  }
+
+  else {
+    printe(p);
     setkilled(p);
   }
 
@@ -169,6 +188,7 @@ prepare_return(void)
 void
 kerneltrap()
 {
+  struct proc *p = myproc();
   int which_dev = 0;
   uint64 sepc = r_sepc();
   uint64 sstatus = r_sstatus();
@@ -179,9 +199,89 @@ kerneltrap()
   if (intr_get() != 0)
     panic("kerneltrap: interrupts enabled");
 
-  if ((which_dev = devintr()) == 0) {
-    // interrupt or trap from an unknown source
-    printk("scause=0x%lx sepc=0x%lx stval=0x%lx\n", scause, r_sepc(),
+  if ((which_dev = devintr()) != 0) {
+    // ok
+  }
+
+  else if (scause == 15 || scause == 13) { // load/store page fault
+
+    uint64 faultva = r_stval();
+
+    if (faultva >= HIGH_HALF_BASE) { // 发生在高半区用户态
+      uint64 ufaultva = K2U(faultva);
+      uint64 align_ufva = PGROUNDDOWN(ufaultva);
+      uint64 align_fva  = PGROUNDDOWN(faultva);
+      pte_t *pte = 0;
+      int lazy_fault = 0;
+
+      // k_pagetable User virtual addresses are below in the current layout.
+      if (p != 0 && ufaultva < p->sz) {
+        pte = walk(p->pagetable, ufaultva, 0);
+        if (pte == 0 ||
+            (((*pte & PTE_V) == 0) && ((*pte & PTE_G) == 0)))
+          lazy_fault = 1;
+      }
+
+      if (lazy_fault) {
+        uint64 pa;
+        if ((pa = (uint64)kalloc()) != 0) {
+          memset((void *)pa, 0, PGSIZE);
+          if (mappages(p->pagetable, align_ufva, PGSIZE,
+          pa, PTE_U | PTE_R | PTE_W) == -1
+          || mappages(p->k_pagetable, align_fva, PGSIZE,
+          pa, PTE_R | PTE_W) == -1) {
+            printe(p);
+            uvmunmap(p->k_pagetable, align_fva, 1, 0);
+            uvmunmap(p->pagetable, align_ufva, 1, 0);
+            kfree((void *)pa);
+            printk("kerneltrap : lazy allocate fault");
+            kexit(-1);
+          }
+          sfence_vma();
+        }
+
+        else {
+          printk("kerneltrap : No more physical memory to lazy allocate");
+          kexit(-1);
+        }
+      }
+
+      else if (p != 0 && ufaultva < MAXVA) {
+        // 非lazy fault
+        kexit(-1);
+      }
+
+      else {
+        printk("scause=0x%lx sepc=0x%lx stval=0x%lx\n", scause, sepc,
+              faultva);
+        panic("kerneltrap");
+      }
+    }
+
+    else if (faultva < HIGH_HALF_BASE && faultva >= MAXVA) { // 发生在不合理的地址
+      printk("scause=0x%lx sepc=0x%lx stval=0x%lx\n", scause, sepc,
+              faultva);
+      printk("Invalid Sv39 address\n");
+      panic("kerneltrap");
+    }
+
+    else if (faultva < MAXVA && faultva >= KERNBASE) { // 发生在内核区
+      printk("scause=0x%lx sepc=0x%lx stval=0x%lx\n", scause, sepc,
+              faultva);
+      printk("Fault in kernel address\n");
+      panic("kerneltrap");
+    }
+
+    else {
+      printk("scause=0x%lx sepc=0x%lx stval=0x%lx\n", scause, sepc,
+              faultva);
+      printk("Unknown fault\n");
+      panic("kerneltrap");
+    }
+  }
+
+  else { // 除了load/store page fault 其他原因kerneltrap先不处理
+    printk("scause=0x%lx sepc=0x%lx stval=0x%lx\n", scause, sepc,
            r_stval());
     panic("kerneltrap");
   }

@@ -44,12 +44,25 @@ sys_sbrk(void)
   int n;
 
   argint(0, &n);
-  p->sz += n;
 
+  uint64 oldsz = p->sz;
+
+  if(n < 0) {
+    if (growproc(n) == -1) {
+      return -1;
+    }
+  }
+
+  else if (p->sz + n >= USYSCALL) {
+    printk("sys_sbrk : Grow out of range");
+    return -1;
+  }
+
+  else p->sz += n;
   // if (growproc(n) < 0)
   //   return -1;
 
-  return p->sz;
+  return oldsz;
 }
 
 uint64
