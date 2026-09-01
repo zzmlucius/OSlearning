@@ -4,7 +4,7 @@
 int main(int argc, char *argv[])
 {
     if(argc < 3) { // at leatst three args, 1.trace 2.mask 3.call user func
-        fprintf(2, "trace : too few arguments.");
+        fprintf(2, "trace : too few arguments.\n");
         exit(1);
     }
 
@@ -18,7 +18,7 @@ int main(int argc, char *argv[])
     nargv[n] = 0; // Attention : argv[]参数必须以 0 结尾
 
     if(mask < 0 || mask > 2147483647) {
-        fprintf(2, "trace : mask out of range.");
+        fprintf(2, "trace : mask out of range.\n");
     }
 
     trace(mask);
