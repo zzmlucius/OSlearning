@@ -89,6 +89,7 @@ kvminithart()
   // wait for any previous writes to the page table memory to finish.
   sfence_vma();
 
+  // after this instruction, all the addr used by CPU was interpreted by MMU(memmory map unit)
   w_satp(MAKE_SATP(kernel_pagetable));
 
   // flush stale entries from the TLB.

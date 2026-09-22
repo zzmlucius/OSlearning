@@ -543,9 +543,9 @@ scheduler(void)
     // processes are waiting. Then turn them back off
     // to avoid a possible race between an interrupt
     // and wfi.
-    intr_on();
-    intr_off();
-
+    intr_on();  // 短暂开中断：处理积压的事件
+    intr_off(); // 随后关中断：保护“检查进程 → wfi”等待”这一段
+    
     int found = 0;
     for (p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
@@ -563,7 +563,7 @@ scheduler(void)
         c->proc = p;
         swtch(&c->context, &p->context);
 
-        // back to the global kernel pagetable
+        // back to the global kernel pagetable, because the scheduler doesn't belong to any process
         kvminithart();
 
         // Process is done running for now.
@@ -589,6 +589,7 @@ scheduler(void)
 // be proc->intena and proc->noff, but that would
 // break in the few places where a lock is held but
 // there's no process.
+// 将当前进程切换到调度器
 void
 sched(void)
 {
@@ -605,7 +606,8 @@ sched(void)
     panic("sched interruptible");
 
   intena = mycpu()->intena;
-  swtch(&p->context, &mycpu()->context);
+  swtch(&p->context, &mycpu()->context); // 这里会进入调度器，此时这个进程内核上下文被保存在它的trapframe中，
+                                         // 然后替换成之前保存的调度器上下文
   mycpu()->intena = intena;
 }
 

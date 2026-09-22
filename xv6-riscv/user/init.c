@@ -16,8 +16,8 @@ main(void)
 {
   int pid, wpid;
 
-  if (open("console", O_RDWR) < 0) {
-    mknod("console", CONSOLE, 0);
+  if (open("console", O_RDWR) < 0) { // open返回文件描述符0：stdin，后面dup（0）偏移两次。
+    mknod("console", CONSOLE, 0);    // shell 总是从console读
     open("console", O_RDWR);
   }
   dup(0); // stdout
