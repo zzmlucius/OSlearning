@@ -544,7 +544,7 @@ scheduler(void)
     // to avoid a possible race between an interrupt
     // and wfi.
     intr_on();  // 短暂开中断：处理积压的事件
-    intr_off(); // 随后关中断：保护“检查进程 → wfi”等待”这一段
+    intr_off();
     
     int found = 0;
     for (p = proc; p < &proc[NPROC]; p++) {
@@ -606,7 +606,7 @@ sched(void)
     panic("sched interruptible");
 
   intena = mycpu()->intena;
-  swtch(&p->context, &mycpu()->context); // 这里会进入调度器，此时这个进程内核上下文被保存在它的trapframe中，
+  swtch(&p->context, &mycpu()->context); // 这里会进入调度器，此时这个进程内核上下文被保存在p->context中，
                                          // 然后替换成之前保存的调度器上下文
   mycpu()->intena = intena;
 }
@@ -673,13 +673,15 @@ sleep(void *chan, struct spinlock *lk)
   // so it's okay to release lk.
 
   acquire(&p->lock); //DOC: sleeplock1
+  // now the proc has both the p->lock and lk
+  // if skip acquire(&p->lock)
   release(lk);
 
   // Go to sleep.
   p->chan = chan;
   p->state = SLEEPING;
 
-  sched();
+  sched(); // if wakeup(), run from here
 
   // Tidy up.
   p->chan = 0;
