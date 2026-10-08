@@ -18,7 +18,8 @@
     - block1 : superblock{record NBLOCKS, log blocks...}
     - block2 ~ ? : log block
     - ? ~ end: data block
-- API : balloc/bfree
+    - bitmap : ?
+- API : balloc/bfree ?
 ---
 - Buffer cache : 
     - struct buf, bcache
@@ -29,9 +30,9 @@
     - structure : a header block and a sequence of logged blocks
     - transaction :
 - API :
-    - begin_op
-    - log_write
-    - end_op
+    - begin_op ?
+    - log_write 
+    - end_op ?
     - commit
 ---
 - Inode : two meanings
