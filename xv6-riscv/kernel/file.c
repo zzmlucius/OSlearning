@@ -157,8 +157,8 @@ filewrite(struct file *f, uint64 addr, int n)
       if (n1 > max)
         n1 = max;
 
-      begin_op();
-      ilock(f->ip);
+      begin_op();   // increse the log.outstanding, try to reserved a space
+      ilock(f->ip); // lock the given inode
       if ((r = writei(f->ip, 1, addr + i, f->off, n1)) > 0)
         f->off += r;
       iunlock(f->ip);

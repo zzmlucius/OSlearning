@@ -44,7 +44,7 @@ struct log {
   int committing;  // in commit(), please wait.
   int dev;
   int ncommit;
-  struct logheader lh;
+  struct logheader lh; // record the logged block
 };
 struct log log;
 
@@ -133,6 +133,7 @@ begin_op(void)
     if (log.committing) {
       sleep(&log, &log.lock);
     } else if (log.lh.n + (log.outstanding + 1) * MAXOPBLOCKS > LOGBLOCKS) {
+      // it assume that every system call write up to MAXOPBLOCKS blocks.
       // this op might exhaust log space; wait for commit.
       sleep(&log, &log.lock);
     } else {
@@ -151,7 +152,7 @@ end_op(void)
   int do_commit = 0;
 
   acquire(&log.lock);
-  log.outstanding -= 1;
+  log.outstanding -= 1; // why decrement the syscall numbers
   if (log.committing)
     panic("log.committing");
   if (log.outstanding == 0) {
@@ -198,10 +199,10 @@ commit()
 {
   if (log.lh.n > 0) {
     write_log();      // Write modified blocks from cache to log
-    write_head();     // Write header to disk -- the real commit
-    install_trans(0); // Now install writes to home locations
+    write_head();     // Write header to disk -- the real commit, but now only record the head
+    install_trans(0); // Now install writes to home locations -- the real write, write the data to disk
     log.lh.n = 0;
-    write_head(); // Erase the transaction from the log
+    write_head();     // Erase the transaction from the log
   }
 }
 
@@ -231,7 +232,7 @@ log_write(struct buf *b)
   }
   log.lh.block[i] = b->blockno;
   if (i == log.lh.n) { // Add new block to log?
-    bpin(b);
+    bpin(b); // increase b->refcnt to pin the buf block
     log.lh.n++;
   }
   release(&log.lock);
